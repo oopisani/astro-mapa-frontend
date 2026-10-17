@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet - Mapa de Observação e UAPs</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map { height: 100vh; width: 100%; }
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        .leaflet-popup-content { 
+            width: 300px !important; 
+            max-height: 400px; 
+            overflow-y: auto; 
+            padding-right: 5px;
+        }
+        .form-label { font-weight: bold; font-size: 13px; margin: 10px 0 3px 0; display: block; color: #333; }
+        .form-input, .form-select, .form-textarea { width: 100%; padding: 5px; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        const map = L.map('map', { doubleClickZoom: false }).setView([-27.6146, -48.6331], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        let marcadorTemporario = null;
+
+        map.on('dblclick', function(e) {
+            const lat = e.latlng.lat; 
+            const lng = e.latlng.lng; 
+
+            if (marcadorTemporario) { map.removeLayer(marcadorTemporario); }
+
+            marcadorTemporario = L.marker([lat, lng]).addTo(map);
+
+            const meuFormulario = `
+                <h3 style="margin-top:0; color:#2c3e50;">Novo Registro de Local</h3>
+
+                <label class="form-label">Nome do local (opcional):</label>
+                <input type="text" id="nome_local" class="form-input" placeholder="Ex: Morro da Cruz">
+
+                <label class="form-label">Tipo de Localização:</label>
+                <select id="tipo_local" class="form-select">
+                    <option value="Morro">Morro — Elevação natural do terreno</option>
+                    <option value="Planície">Planície — Área predominantemente plana</option>
+                    <option value="Planalto">Planalto — Área elevada</option>
+                    <option value="Montanha/Serra">Montanha/Serra — Grandes elevações</option>
+                    <option value="Vale">Vale — Área mais baixa</option>
+                    <option value="Praia/Litoral">Praia/Litoral — Área costeira</option>
+                    <option value="Mirante">Mirante — Vista aberta</option>
+                    <option value="Campo Aberto">Campo aberto</option>
+                    <option value="Área Urbana">Área urbana</option>
+                    <option value="Outro">Outro</option>
+                </select>
+
+                <label class="form-label">O local é seguro?</label>
+                <input type="radio" name="seguro" value="Sim" id="seguro_sim"> <label for="seguro_sim">Sim</label>
+                <input type="radio" name="seguro" value="Não" id="seguro_nao"> <label for="seguro_nao">Não</label>
+
+                <label class="form-label">O acesso é fácil?</label>
+                <input type="radio" name="acesso" value="Sim" id="acesso_sim"> <label for="acesso_sim">Sim</label>
+                <input type="radio" name="acesso" value="Não" id="acesso_nao"> <label for="acesso_nao">Não</label>
+
+                <label class="form-label">Visibilidade das Estrelas:</label>
+                <select id="visibilidade" class="form-select">
+                    <option value="Excelente">Excelente — Via Láctea visível</option>
+                    <option value="Boa">Boa — Muitas estrelas</option>
+                    <option value="Moderada">Moderada — Alguma poluição luminosa</option>
+                    <option value="Baixa">Baixa — Poucas estrelas</option>
+                    <option value="Muito Baixa">Muito baixa — Encoberto/Iluminado</option>
+                    <option value="Não sei informar">Não sei informar</option>
+                </select>
+
+                <label class="form-label">Houve avistamento de OVNI / UAP?</label>
+                <input type="radio" name="ovni" value="Sim" id="ovni_sim"> <label for="ovni_sim">Sim</label>
+                <input type="radio" name="ovni" value="Não" id="ovni_nao" checked> <label for="ovni_nao">Não</label>
+
+                <!-- NOVO CAMPO: DATA E HORA DO AVISTAMENTO -->
+                <label class="form-label">Se sim, quando ocorreu?</label>
+                <input type="datetime-local" id="data_ovni" class="form-input">
+
+                <label class="form-label">Momento Significante (opcional):</label>
+                <textarea id="momento" class="form-textarea" rows="3" placeholder="Ex: Acampamento com amigos..."></textarea>
+                
+                <br><br>
+                <button onclick="salvarPonto(${lat}, ${lng})" style="width: 100%; padding: 10px; background-color: #2c3e50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Salvar Informações</button>
+            `;
+
+            marcadorTemporario.bindPopup(meuFormulario).openPopup();
+        });
+
+        function pegarValorRadio(nomeDoGrupo) {
+            const opcoes = document.getElementsByName(nomeDoGrupo);
+            for (let opcao of opcoes) {
+                if (opcao.checked) return opcao.value;
+            }
+            return "Não informado"; 
+        }
+
+        function salvarPonto(lat, lng) {
+            const nomeLocal = document.getElementById('nome_local').value;
+            const tipoLocal = document.getElementById('tipo_local').value;
+            const seguro = pegarValorRadio('seguro');
+            const acesso = pegarValorRadio('acesso');
+            const visibilidade = document.getElementById('visibilidade').value;
+            const ovni = pegarValorRadio('ovni');
+            
+        
+            const dataOvniInput = document.getElementById('data_ovni').value;
+            const momento = document.getElementById('momento').value;
+            
+        
+            const dataOvniBanco = dataOvniInput ? new Date(dataOvniInput).toISOString() : null;
+
+    
+            const dadosParaAPI = {
+                latitude: lat,
+                longitude: lng,
+                name: nomeLocal,
+                locationType: tipoLocal,
+                isSafe: seguro === 'Sim', // Transforma "Sim" em true, o resto em false
+                easyAccess: acesso === 'Sim',
+                starVisibility: visibilidade,
+                uapSighting: ovni === 'Sim',
+                uapSightingDateTime: ovni === 'Sim' ? dataOvniBanco : null, 
+                significantMoment: momento,
+                createdAt: new Date().toISOString()
+            };
+
+            fetch('https://astro-mapa.onrender.com/api/v1/pins', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(dadosParaAPI)
+            })
+            .then(resposta => {
+                if (!resposta.ok) throw new Error('Erro ao salvar no banco.');
+                return resposta.json();
+            })
+            .then(dadosRetornados => {
+                map.removeLayer(marcadorTemporario);
+                marcadorTemporario = null;
+
+                const marcadorDefinitivo = L.marker([lat, lng]).addTo(map);
+                const dataVisivel = new Date().toLocaleString('pt-BR');
+
+            
+                let textoAvistamento = 'Não';
+                if (ovni === 'Sim') {
+                    let dataExibicao = dataOvniInput ? new Date(dataOvniInput).toLocaleString('pt-BR') : 'Data não informada';
+                    textoAvistamento = `<span style="color:red; font-weight:bold;">SIM 🛸</span> <br><small>(${dataExibicao})</small>`;
+                }
+
+                const balaoHTML = `
+                    <h3 style="margin: 0 0 10px 0; color:#2c3e50;">${nomeLocal || "Local sem nome"}</h3>
+                    <div style="font-size: 13px; line-height: 1.5;">
+                        <b>Tipo:</b> ${tipoLocal}<br>
+                        <b>Seguro:</b> ${seguro} | <b>Acesso Fácil:</b> ${acesso}<br>
+                        <b>Visibilidade:</b> ${visibilidade}<br>
+                        <b>Avistamento OVNI/UAP:</b> ${textoAvistamento}<br>
+                        
+                        <hr style="border: 0; border-top: 1px solid #ccc; margin: 10px 0;">
+                        
+                        <b>Momento Especial:</b><br>
+                        <i style="color: #555;">"${momento || "Nenhum registro especial."}"</i><br>
+                        
+                        <hr style="border: 0; border-top: 1px solid #ccc; margin: 10px 0;">
+                        <div style="font-size: 10px; color: gray; text-align: right;">
+                            Adicionado em: ${dataVisivel}<br>
+                            Lat: ${lat.toFixed(4)} | Lng: ${lng.toFixed(4)}
+                        </div>
+                    </div>
+                `;
+                
+                marcadorDefinitivo.bindPopup(balaoHTML).openPopup();
+            })
+            .catch(erro => {
+                console.error(erro);
+                alert("Não foi possível conectar ao servidor. Verifique se o backend está rodando na porta 8080.");
+            });
+        }
+
+        // FUNÇÃO QUE DESENHA OS PINOS QUE VIERAM DO BANCO DE DADOS
+        function adicionarMarcadorNoMapa(ponto) {
+            const marcador = L.marker([ponto.latitude, ponto.longitude]).addTo(map);
+            
+            const dataVisivel = new Date(ponto.createdAt).toLocaleString('pt-BR');
+            
+            let textoAvistamento = 'Não';
+            if (ponto.uapSighting) {
+                let dataExibicao = ponto.uapSightingDateTime ? new Date(ponto.uapSightingDateTime).toLocaleString('pt-BR') : 'Data não informada';
+                textoAvistamento = `<span style="color:red; font-weight:bold;">SIM 🛸</span> <br><small>(${dataExibicao})</small>`;
+            }
+
+            const balaoHTML = `
+                <h3 style="margin: 0 0 10px 0; color:#2c3e50;">${ponto.name || "Local sem nome"}</h3>
+                <div style="font-size: 13px; line-height: 1.5;">
+                    <b>Tipo:</b> ${ponto.locationType}<br>
+                    <b>Seguro:</b> ${ponto.isSafe ? 'Sim' : 'Não'} | <b>Acesso Fácil:</b> ${ponto.easyAccess ? 'Sim' : 'Não'}<br>
+                    <b>Visibilidade:</b> ${ponto.starVisibility}<br>
+                    <b>Avistamento OVNI/UAP:</b> ${textoAvistamento}<br>
+                    
+                    <hr style="border: 0; border-top: 1px solid #ccc; margin: 10px 0;">
+                    
+                    <b>Momento Especial:</b><br>
+                    <i style="color: #555;">"${ponto.significantMoment || "Nenhum registro especial."}"</i><br>
+                    
+                    <hr style="border: 0; border-top: 1px solid #ccc; margin: 10px 0;">
+                    <div style="font-size: 10px; color: gray; text-align: right;">
+                        Adicionado em: ${dataVisivel}<br>
+                        Lat: ${ponto.latitude.toFixed(4)} | Lng: ${ponto.longitude.toFixed(4)}
+                    </div>
+                </div>
+            `;
+            
+            marcador.bindPopup(balaoHTML);
+        }
+
+        // BUSCA TODOS OS PONTOS DO BANCO DE DADOS AO CARREGAR A PÁGINA
+        function carregarPontosDoBanco() {
+            fetch('https://astro-mapa.onrender.com/api/v1/pins') 
+                .then(resposta => {
+                    if (!resposta.ok) throw new Error('Erro ao buscar os pontos.');
+                    return resposta.json();
+                })
+                .then(listaDePontos => {
+                    console.log("Pontos carregados com sucesso:", listaDePontos);
+                    listaDePontos.forEach(ponto => {
+                        adicionarMarcadorNoMapa(ponto);
+                    });
+                })
+                .catch(erro => {
+                    console.error("Erro ao carregar o mapa inicial:", erro);
+                });
+        }
+
+    
+        carregarPontosDoBanco();
+
+    </script>
+</body>
+</html>
